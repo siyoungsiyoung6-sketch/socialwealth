@@ -92,11 +92,7 @@ function calculateWorth(
 const fmtMoney = (n: number) =>
   n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 
-interface WorthCalculatorProps {
-  onWorthCalculated?: (worth: number) => void;
-}
-
-export default function WorthCalculator({ onWorthCalculated }: WorthCalculatorProps) {
+export default function WorthCalculator() {
   const [categoryId, setCategoryId] = useState(JOB_CATEGORIES[0].id);
   const [baseSalary, setBaseSalary] = useState('');
   const [yearsExperience, setYearsExperience] = useState('');
@@ -118,7 +114,6 @@ export default function WorthCalculator({ onWorthCalculated }: WorthCalculatorPr
       setTimeout(() => {
         setResult(res);
         setScanning(false);
-        onWorthCalculated?.(res.targetMarketWorth);
       }, 2500);
       return;
     }
@@ -133,7 +128,6 @@ export default function WorthCalculator({ onWorthCalculated }: WorthCalculatorPr
       const res = calculateWorth(effectiveCategory, years, performanceLevel, locationTierId);
       setResult(res);
       setScanning(false);
-      onWorthCalculated?.(res.targetMarketWorth);
     }, 2500);
   };
 
@@ -143,7 +137,6 @@ export default function WorthCalculator({ onWorthCalculated }: WorthCalculatorPr
     setYearsExperience('');
     setPerformanceLevel(3);
     setLocationTierId('standard');
-    onWorthCalculated?.(0);
   };
 
   return (

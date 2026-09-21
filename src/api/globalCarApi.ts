@@ -40,22 +40,38 @@ const MOCK_CARS: Omit<CarListing, 'id' | 'valuation' | 'imageUrl'>[] = [
   { make: 'Porsche', model: 'Macan', year: 2024, price: 62900, bodyType: 'SUV', fuelType: 'Gasoline' },
 ];
 
-function generateMockCars(budget: number): CarListing[] {
-  const filtered = MOCK_CARS.filter((c) => c.price <= budget);
-  const pool = filtered.length >= 6 ? filtered : MOCK_CARS.slice(0, 12);
-  return pool.slice(0, 12).map((c, i) => ({
+function generateMockCars(budget: number, makeQuery?: string, modelQuery?: string): CarListing[] {
+  let pool = MOCK_CARS;
+  if (makeQuery) {
+    pool = pool.filter((c) => c.make.toLowerCase().includes(makeQuery.toLowerCase()));
+  }
+  if (modelQuery) {
+    pool = pool.filter((c) => c.model.toLowerCase().includes(modelQuery.toLowerCase()));
+  }
+  const inBudget = pool.filter((c) => c.price <= budget);
+  const final = inBudget.length >= 3 ? inBudget : pool.slice(0, 12);
+  return final.slice(0, 12).map((c, i) => ({
     ...c,
     id: `mock-${i}-${c.make}-${c.model}`,
     valuation: Math.round(c.price * 0.92),
-    imageUrl: `https://images.unsplash.com/photo-1503376780353-1546113a4f34?w=400&q=80`,
+    imageUrl: '',
   }));
 }
 
-export async function fetchGlobalCarData(budget: number): Promise<{
+export interface CarSearchParams {
+  budget: number;
+  make?: string;
+  model?: string;
+  year?: number;
+}
+
+export async function fetchGlobalCarData(params: CarSearchParams): Promise<{
   cars: CarListing[];
   source: 'live' | 'mock';
   error: string | null;
 }> {
+  const { budget, make, model, year } = params;
+
   try {
     const makesRes = await fetch(`${API_BASE}/makes`, {
       headers: {
@@ -74,14 +90,22 @@ export async function fetchGlobalCarData(budget: number): Promise<{
       throw new Error('CarAPI returned no makes.');
     }
 
-    const affordableMakes = makes.slice(0, 20);
-    const cars: CarListing[] = [];
+    let targetMakes = makes;
+    if (make) {
+      const filtered = makes.filter((m) => m.name.toLowerCase().includes(make.toLowerCase()));
+      targetMakes = filtered.length > 0 ? filtered : makes.slice(0, 20);
+    } else {
+      targetMakes = makes.slice(0, 20);
+    }
 
-    for (const make of affordableMakes) {
+    const cars: CarListing[] = [];
+    const searchYear = year || 2024;
+
+    for (const mk of targetMakes) {
       if (cars.length >= 12) break;
       try {
         const modelsRes = await fetch(
-          `${API_BASE}/models?make_id=${make.id}&year=2024`,
+          `${API_BASE}/models?make_id=${mk.id}&year=${searchYear}`,
           {
             headers: {
               Authorization: `Bearer ${API_TOKEN}`,
@@ -92,22 +116,26 @@ export async function fetchGlobalCarData(budget: number): Promise<{
         if (!modelsRes.ok) continue;
         const modelsData = await modelsRes.json();
         const models: Array<{ id: number; name: string }> = modelsData.data || modelsData || [];
-        for (const model of models.slice(0, 3)) {
+
+        const filteredModels = model
+          ? models.filter((m) => m.name.toLowerCase().includes(model.toLowerCase()))
+          : models;
+
+        for (const mdl of filteredModels.slice(0, 5)) {
           if (cars.length >= 12) break;
-          const estimatedPrice = estimateVehiclePrice(make.name, model.name);
-          if (estimatedPrice <= budget) {
-            cars.push({
-              id: `live-${make.id}-${model.id}`,
-              make: make.name,
-              model: model.name,
-              year: 2024,
-              price: estimatedPrice,
-              valuation: Math.round(estimatedPrice * 0.92),
-              bodyType: guessBodyType(model.name),
-              fuelType: 'Gasoline',
-              imageUrl: `https://images.unsplash.com/photo-1503376780353-1546113a4f34?w=400&q=80`,
-            });
-          }
+          const estimatedPrice = estimateVehiclePrice(mk.name, mdl.name);
+          if (budget > 0 && estimatedPrice > budget) continue;
+          cars.push({
+            id: `live-${mk.id}-${mdl.id}`,
+            make: mk.name,
+            model: mdl.name,
+            year: searchYear,
+            price: estimatedPrice,
+            valuation: Math.round(estimatedPrice * 0.92),
+            bodyType: guessBodyType(mdl.name),
+            fuelType: guessFuelType(mk.name, mdl.name),
+            imageUrl: '',
+          });
         }
       } catch {
         continue;
@@ -115,13 +143,17 @@ export async function fetchGlobalCarData(budget: number): Promise<{
     }
 
     if (cars.length === 0) {
-      return { cars: generateMockCars(budget), source: 'mock', error: 'No vehicles found within budget from live API.' };
+      return {
+        cars: generateMockCars(budget || 100000, make, model),
+        source: 'mock',
+        error: 'No vehicles found matching your criteria from live API.',
+      };
     }
 
     return { cars, source: 'live', error: null };
   } catch (err) {
     return {
-      cars: generateMockCars(budget),
+      cars: generateMockCars(budget || 100000, make, model),
       source: 'mock',
       error: err instanceof Error ? err.message : 'CarAPI unreachable — using fallback data.',
     };
@@ -138,8 +170,15 @@ function estimateVehiclePrice(make: string, model: string): number {
 
 function guessBodyType(model: string): string {
   const m = model.toLowerCase();
-  if (m.includes('suv') || m.includes('tahoe') || m.includes('explorer')) return 'SUV';
+  if (m.includes('suv') || m.includes('tahoe') || m.includes('explorer') || m.includes('rav4') || m.includes('cr-v') || m.includes('cx-')) return 'SUV';
   if (m.includes('truck') || m.includes('f-') || m.includes('silverado')) return 'Truck';
   if (m.includes('coupe') || m.includes('mustang')) return 'Coupe';
   return 'Sedan';
+}
+
+function guessFuelType(make: string, model: string): string {
+  if (make === 'Tesla' || model.toLowerCase().includes('ev') || model.toLowerCase().includes('electric')) return 'Electric';
+  if (model.toLowerCase().includes('hybrid')) return 'Hybrid';
+  if (model.toLowerCase().includes('diesel')) return 'Diesel';
+  return 'Gasoline';
 }
