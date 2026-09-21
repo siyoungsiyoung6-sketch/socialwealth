@@ -20,6 +20,8 @@ export default function Header() {
         <nav className="hidden items-center gap-6 text-sm text-slate-400 md:flex">
           <a href="#search" className="transition hover:text-cyan-400">Search</a>
           <a href="#calculator" className="transition hover:text-cyan-400">Calculator</a>
+          <a href="#worth-calculator" className="transition hover:text-cyan-400">Worth</a>
+          <a href="#car-matcher" className="transition hover:text-cyan-400">Car Match</a>
           <a href="#leaderboard" className="transition hover:text-cyan-400">Leaderboard</a>
           <a href="#sponsors" className="transition hover:text-cyan-400">Sponsors</a>
         </nav>
